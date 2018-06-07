@@ -1,0 +1,22 @@
+body {
+  background: #EEE;
+  margin: 0;
+}
+
+canvas {
+  display: block;
+}
+
+.stats {
+  position: fixed;
+  left: 0;
+  top: 0;
+}
+
+.grab {
+  cursor: -webkit-grab;
+}
+
+.grabbing {
+  cursor: -webkit-grabbing;
+}

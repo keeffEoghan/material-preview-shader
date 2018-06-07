@@ -1,0 +1,227 @@
+<html>
+  <head>
+    <title>Shader</title>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <link rel="stylesheet" href="styles/styles.css">
+  </head>
+  <body>
+
+    <div id="container" class="grab">
+    </div>
+
+    <script id="vertexShader" type="x-shader/x-vertex">
+
+      varying vec2 vUV;
+
+      void main() {
+
+        vUV = uv;
+
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+
+    </script>
+
+    <script id="fragmentShader" type="x-shader/x-fragment">
+
+      uniform sampler2D uTexture;
+
+      uniform float uTime;
+
+      varying vec2 vUV;
+
+      /**
+       * This transforms a given colour from the screen's RGB gamut into another (possibly skewed) gamut.
+       * It treats the colour transformation as a geometric transformation, within the 3 dimensional
+       * bounds of the gamut cuboids.
+       * Scaling by the values of each channel of the fragment colour, along the vectors of the
+       * corresponding channel of the target gamut; progressively reduce the number of free
+       * dimensions until we find the coordinates of our transformed colour:
+       *     3: the full skewed cuboid
+       *     2: the skewed plane defined by components of the fragment's first scaled channel
+       *     1: the vector along this plane defined by the fragment's second scaled channel
+       *     0: the point along this vector, defined by the fragment's third scaled channel; our result
+       *
+       * The target colour gamut: a cuboid, with the 8 corners (limits of the three channels) as shown:
+       *
+       *        010._________.110
+       *           /|       /|
+       *          / |      / |
+       *         /  |     /  |
+       *    011./___|___./111|
+       *       |    |.___|___|.100
+       *       |   / 000 |   /
+       *       |  /      |  /
+       *       | /       | /
+       *   001 |.________|. 101
+       *
+       */
+
+      /** Corner (0, 0, 0), or "black" */
+      uniform vec3 gamutCorner000;
+
+      /** Corner (1, 0, 0), or "red" */
+      uniform vec3 gamutCorner100;
+
+      /** Corner (0, 1, 0), or "green" */
+      uniform vec3 gamutCorner010;
+
+      /** Corner (0, 0, 1), or "blue" */
+      uniform vec3 gamutCorner001;
+
+      /** Corner (1, 1, 0), or "yellow" */
+      uniform vec3 gamutCorner110;
+
+      /** Corner (0, 1, 1), or "cyan" */
+      uniform vec3 gamutCorner011;
+
+      /** Corner (1, 0, 1), or "magenta" */
+      uniform vec3 gamutCorner101;
+
+      /** Corner (1, 1, 1), or "white" */
+      uniform vec3 gamutCorner111;
+
+
+      vec3 transformColour(vec3 colour) {
+          /**
+           * The first target colour channel's primary line and its 3 opposites, ordered in our expected winding,
+           * which define our cuboid (3 free dimensions). Note: the winding is important.
+           *
+           *           _________. 1(010>110)
+           *
+           *
+           *
+           *        ________. 2(011>111)
+           *           _________. 0(000>100)
+           *
+           *
+           *
+           *        ________. 3(001>101)
+           */
+
+          /** The first channel's primary line: a point at corner (0, 0, 0), and a vector to corner (1, 0, 0) */
+          vec3 edgeLine0P = gamutCorner000,
+              edgeLine0V = gamutCorner100-gamutCorner000;
+
+          /** The first channel's secondary line: a point at corner (0, 1, 0), and a vector to corner (1, 1, 0) */
+          vec3 edgeLine1P = gamutCorner010,
+              edgeLine1V = gamutCorner110-gamutCorner010;
+
+          /** The first channel's tertiary line: a point at corner (0, 1, 1), and a vector to corner (1, 1, 1) */
+          vec3 edgeLine2P = gamutCorner011,
+              edgeLine2V = gamutCorner111-gamutCorner011;
+
+          /** The first channel's quaternary line: a point at corner (0, 0, 1), and a vector to corner (1, 0, 1) */
+          vec3 edgeLine3P = gamutCorner001,
+              edgeLine3V = gamutCorner101-gamutCorner001;
+
+
+          /**
+           * The scaled points on the first channel's boundary lines, which define the corners of our
+           * plane (2 free dimensions).
+           *
+           *                  1
+           *             _____.___
+           *
+           *
+           *              2
+           *         _____.___
+           *             _____.___
+           *                  0
+           *
+           *
+           *              3
+           *         _____.___
+           */
+          vec3 edgePoint0 = edgeLine0P+(edgeLine0V*colour.x),
+              edgePoint1 = edgeLine1P+(edgeLine1V*colour.x),
+              edgePoint2 = edgeLine2P+(edgeLine2V*colour.x),
+              edgePoint3 = edgeLine3P+(edgeLine3V*colour.x);
+
+
+          /**
+           * The connecting lines across the secondary channel's faces (shared with the primary channel),
+           * derived by connecting the above edge lines in the order they cross the secondary channel.
+           *
+           *               0(0>1)
+           *                  .
+           *                  |
+           *                  |
+           *         1(3>2)   |
+           *              .   |
+           *              |   |
+           *              |
+           *              |
+           *              |
+           *              |
+           *
+           * We're only interested in one of the two possible pairs: the one which
+           * shares a face with the secondary channel.
+           * With our winding, this is a pair of opposite lines, in the direction from the origin to the
+           * first component's direction.
+           */
+          vec3 faceLine0P = edgePoint0,
+              faceLine0V = edgePoint1-edgePoint0,
+
+              faceLine1P = edgePoint3,
+              faceLine1V = edgePoint2-edgePoint3;
+
+          /**
+           * The second channel's scale along the above pair of face lines.
+           *
+           *                  |
+           *                  |
+           *                  .0
+           *                  |
+           *              |   |
+           *              |
+           *              .1
+           *              |
+           *              |
+           */
+          vec3 facePoint0 = faceLine0P+(faceLine0V*colour.y),
+              facePoint1 = faceLine1P+(faceLine1V*colour.y);
+
+
+          /**
+           * The third channel's scale, along the inner line connecting the above two points in the direction of
+           * the tertiary channel. This gives us our transformed colour.
+           *
+           *                  /
+           *                 /
+           *                . result!
+           *               /
+           */
+          vec3 innerLineP = facePoint0,
+              innerLineV = facePoint1-facePoint0,
+              transformed = innerLineP+(innerLineV*colour.z);
+
+          return transformed;
+      }
+
+      void main() {
+        vec4 color = texture2D(uTexture, vUV);
+
+        gl_FragColor = vec4(transformColour(color.xyz), 1.0);
+      }
+
+    </script>
+
+    <!-- Libraries -->
+    <script src="scripts/libraries/angular.min.js"></script>
+    <script src="scripts/libraries/signals.min.js"></script>
+    <script src="scripts/libraries/three.min.js"></script>
+    <script src="scripts/libraries/dat.color.min.js"></script>
+    <script src="scripts/libraries/dat.gui.min.js"></script>
+    <script src="scripts/libraries/stats.min.js"></script>
+
+    <!-- Project -->
+    <script src="scripts/project/Scene.js"></script>
+    <script src="scripts/project/Math.js"></script>
+    <script src="scripts/project/Main.js"></script>
+
+  </body>
+</html>
