@@ -19,3 +19,5 @@ in = intValue.r * fromFixed / 1.0
     +intValue.b * fromFixed / (255.0 * 255.0)
     +intValue.a * fromFixed / (255.0 * 255.0 * 255.0);
 ```
+
+- [Demo](https://keeffeoghan.github.io/material-preview-shader)
