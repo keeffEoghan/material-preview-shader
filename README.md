@@ -1,3 +1,7 @@
+# Material Preview - Shader
+
+Simulating real-world colours on-screen, by transforming the colour-space (for use with colour meter readings)
+
 [Encoding 16 and 32 bit floating point values in an RGBA texture](http://www.gamedev.net/topic/486847-encoding-16-and-32-bit-floating-point-value-into-rgba-byte-texture/)
 
 ```glsl
